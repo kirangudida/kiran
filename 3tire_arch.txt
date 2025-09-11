@@ -1,0 +1,208 @@
+
+3 Tier Architecture manual setup
+
+create 3 EC2 instances
+AMI - devops-practice
+username=ec2-user/DevOps321
+
+1.Database - mysql
+2.Backend - NodeJS
+3.Frontend - Nginx
+
+1.Database - mysql
+ssh to public IP of EC2 instances
+172.31.29.81 
+
+switch to root user
+sudo su
+
+install mysql in this database instance
+    dnf install mysql-server -y
+
+    enable and start mysql service
+    systemctl enable mysqld
+    systemctl start mysqld
+    systemctl status mysqld
+
+Check listen port opened or not and process status
+54.160.210.200 | 172.31.29.81 | t3.micro | null
+[ root@ip-172-31-29-81 /home/ec2-user ]# netstat -anlp|grep -i mysqld
+tcp6       0      0 :::3306                 :::*                    LISTEN      4662/mysqld
+tcp6       0      0 :::33060                :::*                    LISTEN      4662/mysqld
+unix  2      [ ACC ]     STREAM     LISTENING     54970    4662/mysqld          /var/lib/mysql/mysqlx.sock
+unix  2      [ ACC ]     STREAM     LISTENING     54973    4662/mysqld          /var/lib/mysql/mysql.sock
+unix  2      [ ]         DGRAM      CONNECTED     54854    4662/mysqld
+
+54.160.210.200 | 172.31.29.81 | t3.micro | null
+[ root@ip-172-31-29-81 /home/ec2-user ]# ps -eaf|grep -i mysqld
+mysql       4662       1  1 22:16 ?        00:00:01 /usr/libexec/mysqld --basedir=/usr
+root        5102    3089  0 22:17 pts/0    00:00:00 grep --color=auto -i mysqld
+
+
+change the default root password in order to start using the database service. 
+    mysql_secure_installation --set-root-pass ExpenseApp@1
+
+check data by using client package called mysql.
+    mysql -h <host-address> -u root -p<password> ==> if from different server
+    mysql ==> same server
+
+check schemas/databases exist
+    show databases;
+
+connect to any schemas/database
+use <schema_name>;
+check the the list of tables.
+show tables;
+check the entries of tables.
+select * from <table_name>;
+**********************************************************************************************
+
+2.Backend - NodeJS
+ssh to public IP of EC2 instances
+172.31.29.81 
+
+switch to root user
+sudo su
+
+install Nodejs in this backedn instance
+Install NodeJS, By default NodeJS 16 is available, We need to enable 20 version and install this.
+dnf module disable nodejs -y
+dnf module list nodejs -y
+dnf module enable nodejs:20 -y
+dnf install nodejs -y
+
+configure the application
+create service user
+useradd expense
+check user
+id expense
+
+create a dir for application
+mkdir /app
+
+download the app code and install on app dir
+curl -o /tmp/backend.zip https://expense-builds.s3.us-east-1.amazonaws.com/expense-backend-v2.zip
+cd /app; unzip /tmp/backend.zip
+
+download the app code libraries/dependencies
+npm install
+
+setup a new service in systemd so systemctl can stop/start/restart this service
+vim /etc/systemd/system/backend.service
+[Unit]
+Description = Backend Service
+
+[Service]
+User=expense
+Environment=DB_HOST="<MYSQL-SERVER-IPADDRESS>"
+ExecStart=/bin/node /app/index.js
+SyslogIdentifier=backend
+
+[Install]
+WantedBy=multi-user.target
+
+NOTE: Ensure you replace with IP address
+
+load and start the service
+systemctl daemon-reload
+systemctl start backend
+systemctl enable backend
+systemctl status backend
+
+For this application to work fully functional we need to load schema to the Database.
+To load schema we need to install mysql client.
+dnf install mysql -y
+
+add security group to allow mysql client in DB instance
+Load Schema now.
+mysql -h <MYSQL-SERVER-IPADDRESS> -uroot -pExpenseApp@1 < /app/schema/backend.sql
+mysql -h 172.31.29.81 -uroot -pExpenseApp@1 < /app/schema/backend.sql
+
+restart the servie now and check status.
+systemctl restart backend
+[ root@ip-172-31-23-109 /app/schema ]# systemctl status backend
+● backend.service - Backend Service
+     Loaded: loaded (/etc/systemd/system/backend.service; enabled; preset: disabled)
+     Active: active (running) since Wed 2025-09-10 23:06:17 UTC; 7min ago
+   Main PID: 28536 (node)
+      Tasks: 7 (limit: 4015)
+     Memory: 25.3M
+        CPU: 388ms
+     CGroup: /system.slice/backend.service
+             └─28536 /bin/node /app/index.js
+
+Sep 10 23:06:17 ip-172-31-23-109.ec2.internal systemd[1]: Started Backend Service.
+Sep 10 23:06:17 ip-172-31-23-109.ec2.internal snoopy[28536]: [uid:1002 sid:28536 tty:(none) cwd:/ filename:/bin/node]: /bin/node /app/index.js
+Sep 10 23:06:18 ip-172-31-23-109.ec2.internal backend[28536]: { "timestamp" : 1757545578, "msg" : "App Started on Port 8080" }
+
+3.87.167.61 | 172.31.23.109 | t3.micro | null
+[ root@ip-172-31-23-109 /app/schema ]# netstat -anlp|grep -i node
+tcp        0      0 172.31.23.109:58406     172.31.29.81:3306       ESTABLISHED 28536/node
+tcp6       0      0 :::8080                 :::*                    LISTEN      28536/node
+Proto RefCnt Flags       Type       State         I-Node   PID/Program name     Path
+unix  3      [ ]         STREAM     CONNECTED     177494   28536/node
+
+
+check databases in DB server.
+
+************************************************************************************************
+
+3.Frontend - Nginx
+Install Nginx
+ dnf install nginx -y 
+enable & start nginx
+ systemctl enable nginx
+ systemctl start nginx
+ systemctl status nginx
+ 
+create security group for http in frontend server
+
+test nginx url from browser
+http://54.227.62.171:80
+
+[ root@ip-172-31-29-230 ~ ]# ps -ef |grep -i nginx
+root       15350       1  0 23:23 ?        00:00:00 nginx: master process /usr/sbin/nginx
+nginx      15351   15350  0 23:23 ?        00:00:00 nginx: worker process
+nginx      15352   15350  0 23:23 ?        00:00:00 nginx: worker process
+root       15411    2291  0 23:23 pts/0    00:00:00 grep --color=auto -i nginx
+
+54.227.62.171 | 172.31.29.230 | t3.micro | null
+[ root@ip-172-31-29-230 ~ ]# netstat -anlp|grep -i nginx
+tcp        0      0 0.0.0.0:80              0.0.0.0:*               LISTEN      15350/nginx: master
+tcp6       0      0 :::80                   :::*                    LISTEN      15350/nginx: master
+unix  3      [ ]         STREAM     CONNECTED     55229    15350/nginx: master
+unix  3      [ ]         STREAM     CONNECTED     55231    15350/nginx: master
+unix  3      [ ]         STREAM     CONNECTED     55230    15350/nginx: master
+unix  3      [ ]         STREAM     CONNECTED     55232    15350/nginx: master
+
+54.227.62.171 | 172.31.29.230 | t3.micro | null
+
+
+Remove the default content that web server is serving.
+ rm -rf /usr/share/nginx/html/*
+
+Download the frontend static content
+ curl -o /tmp/frontend.zip https://expense-builds.s3.us-east-1.amazonaws.com/expense-frontend-v2.zip
+ 
+extract the static content in document root of nginx
+ cd /usr/share/nginx/html;unzip /tmp/frontend.zip
+ 
+check nginx index from browser
+ http://54.227.62.171/index.html#/
+ 
+Create Nginx Reverse Proxy Configuration.
+ cd  /etc/nginx/default.d/;vim expense.conf
+ [ root@ip-172-31-29-230 /etc/nginx/default.d ]# cat expense.conf
+proxy_http_version 1.1;
+
+location /api/ { proxy_pass http://172.31.23.109:8080/; }
+
+location /health {
+  stub_status on;
+  access_log off;
+}
+
+Add inbound security group for 8080 custom tcp port in backend server.
+
+Restart Nginx Service to load the changes of the configuration.
+ systemctl restart nginx
