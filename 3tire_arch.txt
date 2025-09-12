@@ -206,3 +206,35 @@ Add inbound security group for 8080 custom tcp port in backend server.
 
 Restart Nginx Service to load the changes of the configuration.
  systemctl restart nginx
+
+ =========================================================================================
+
+ Loadbalancer config.
+
+ Buy a domain from hostinger
+ 
+ gudida.fun
+update name servers from AWS to hostinger
+
+create records for each server in route53/Hosted zones.
+
+update private IP's for each record.
+
+update public IP for LB recored.
+
+ 
+ ======================================================================
+ Load balancer
+ 
+ add below tag in nginx config
+ 
+ http {
+    upstream frontend {
+        server frontend1.gudida.fun;
+        server frontend2.gudida.fun;
+        }
+     }
+
+    location / {
+        proxy_pass http://frontend;
+    }
